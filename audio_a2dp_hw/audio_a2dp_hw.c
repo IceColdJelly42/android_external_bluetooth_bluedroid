@@ -142,6 +142,21 @@ static const char* dump_a2dp_ctrl_event(char event)
     }
 }
 
+/* enforces a minimum speed freq
+** this ensures that the cpu goes not as low as 51mhz
+** while we are decoding (and encoding!) music due to a2dp
+** the code will return to 51mhz after the audio went silent
+*/
+static void endeavoru_enforce_minfreq(char *freq)
+{
+    int fd = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq", O_WRONLY);
+    if(fd > 0) {
+        write(fd, freq, strlen(freq));
+        INFO("endeavoru minfreq set to %s", freq);
+        close(fd);
+    }
+}
+
 /* logs timestamp with microsec precision
    pprev is optional in case a dedicated diff is required */
 static void ts_log(char *tag, int val, struct timespec *pprev_opt)
@@ -356,6 +371,7 @@ static int start_audio_datapath(struct a2dp_stream_out *out)
         out->state = AUDIO_A2DP_STATE_STARTED;
     }
 
+    endeavoru_enforce_minfreq("204000");
     return 0;
 }
 
@@ -365,6 +381,9 @@ static int stop_audio_datapath(struct a2dp_stream_out *out)
     int oldstate = out->state;
 
     INFO("state %d", out->state);
+
+    /* disable speed enforcement ASAP */
+    endeavoru_enforce_minfreq("0");
 
     if (out->ctrl_fd == AUDIO_SKT_DISCONNECTED)
          return -1;
@@ -392,6 +411,9 @@ static int stop_audio_datapath(struct a2dp_stream_out *out)
 static int suspend_audio_datapath(struct a2dp_stream_out *out, bool standby)
 {
     INFO("state %d", out->state);
+
+    /* disable speed enforcement ASAP */
+    endeavoru_enforce_minfreq("0");
 
     if (out->ctrl_fd == AUDIO_SKT_DISCONNECTED)
          return -1;
